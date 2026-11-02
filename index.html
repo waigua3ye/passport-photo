@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Passport Photo Maker — exact size, no upload</title>
+<meta name="description" content="Crop any photo to exact passport or visa photo size. Runs entirely in your browser — your photo never leaves your device.">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#0e1014;--card:#171a21;--line:#262b36;--txt:#e9ecf2;--dim:#8b94a4;
+  --acc:#4f8cff;--ok:#3ddc97;--warn:#ffb020;
+}
+body{margin:0;background:var(--bg);color:var(--txt);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+.wrap{max-width:920px;margin:0 auto;padding:20px 16px 80px}
+header{margin-bottom:18px}
+h1{font-size:22px;margin:0 0 6px;letter-spacing:-.4px}
+.sub{color:var(--dim);font-size:13.5px;margin:0}
+.badge{display:inline-block;font-size:11.5px;color:var(--ok);border:1px solid var(--ok);
+  border-radius:99px;padding:1px 9px;margin-left:6px;vertical-align:2px}
+
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.lbl{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);margin-bottom:9px}
+.specs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.spec{background:#11141a;border:1px solid var(--line);border-radius:10px;padding:10px 11px;
+  cursor:pointer;transition:.15s;font-size:13px}
+.spec:hover{border-color:#3b4353}
+.spec.on{border-color:var(--acc);background:#131b2b}
+.spec b{display:block;font-size:13.5px;font-weight:600;margin-bottom:2px}
+.spec span{color:var(--dim);font-size:11.5px}
+
+#drop{border:2px dashed #333a48;border-radius:14px;padding:38px 20px;text-align:center;
+  cursor:pointer;transition:.2s;background:#11141a}
+#drop.hot{border-color:var(--acc);background:#131b2b}
+#drop p{margin:8px 0 0;color:var(--dim);font-size:13px}
+#drop b{font-size:15px}
+#file{display:none}
+
+.stage{display:none;grid-template-columns:1fr 300px;gap:16px}
+.stage.on{display:grid}
+@media(max-width:720px){.stage.on{grid-template-columns:1fr}}
+#canvasWrap{position:relative;background:#0a0c10;border-radius:12px;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;min-height:300px;touch-action:none}
+#canvasWrap canvas{display:block;max-width:100%;cursor:grab}
+#canvasWrap canvas:active{cursor:grabbing}
+
+.side h3{font-size:13px;margin:0 0 8px;color:var(--dim);font-weight:500;text-transform:uppercase;letter-spacing:.6px}
+.kv{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #1e232c}
+.kv:last-child{border:0}
+.kv span:last-child{color:var(--txt);font-variant-numeric:tabular-nums}
+.warnbox{font-size:12px;color:var(--warn);background:#1f1a0d;border:1px solid #3d3115;
+  border-radius:8px;padding:8px 10px;margin-top:10px;display:none}
+.warnbox.on{display:block}
+.row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+button{font:inherit;border:0;border-radius:10px;padding:11px 16px;cursor:pointer;transition:.15s}
+.btn-main{background:var(--acc);color:#fff;flex:1;font-weight:600}
+.btn-main:disabled{background:#2a3140;color:#66707f;cursor:not-allowed}
+.btn-ghost{background:#1e232c;color:var(--txt)}
+.btn-ghost:hover{background:#262d38}
+
+.pay{margin-top:14px;padding:14px;border:1px solid #2a3a52;background:#101826;border-radius:12px}
+.pay h4{margin:0 0 6px;font-size:14px}
+.pay p{margin:0 0 10px;font-size:12.5px;color:var(--dim)}
+.pay ul{margin:0 0 12px;padding-left:18px;font-size:12.5px;color:#b6bfcd}
+.pay li{margin:3px 0}
+
+footer{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);
+  color:var(--dim);font-size:12px;line-height:1.7}
+footer a{color:var(--dim)}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Passport Photo Maker <span class="badge">no upload</span></h1>
+    <p class="sub">Crop any photo to an exact passport or visa size. Everything runs in your browser — your photo never leaves this device.</p>
+  </header>
+
+  <div class="panel">
+    <div class="lbl">1 · Choose a size</div>
+    <div class="specs" id="specs"></div>
+  </div>
+
+  <div class="panel">
+    <div class="lbl">2 · Add your photo</div>
+    <div id="drop">
+      <b>Click to choose a photo</b>
+      <p>or drag &amp; drop · JPG / PNG / HEIC · stays on your device</p>
+    </div>
+    <input type="file" id="file" accept="image/*">
+  </div>
+
+  <div class="panel stage" id="stage">
+    <div>
+      <div class="lbl">3 · Fit your face in the frame</div>
+      <div id="canvasWrap"><canvas id="cv"></canvas></div>
+    </div>
+    <div class="side">
+      <h3>Output</h3>
+      <div class="kv"><span>Size</span><span id="oSize">—</span></div>
+      <div class="kv"><span>Pixels</span><span id="oPx">—</span></div>
+      <div class="kv"><span>Background</span><span id="oBg">Keep original</span></div>
+      <div class="kv"><span>Format</span><span>PNG</span></div>
+
+      <div class="row">
+        <button class="btn-ghost" id="bgBtn">White background</button>
+      </div>
+      <div class="row">
+        <button class="btn-ghost" id="resetBtn">Reset fit</button>
+      </div>
+
+      <div class="warnbox" id="warn"></div>
+
+      <div class="row">
+        <button class="btn-main" id="dlBtn">Download preview</button>
+      </div>
+
+      <div class="pay">
+        <h4>Print sheet — $9</h4>
+        <p>Six copies laid out on one sheet, ready to print at any pharmacy or print shop.</p>
+        <ul>
+          <li>6 identical photos on 4×6″</li>
+          <li>Cut lines included</li>
+          <li>PDF + PNG, one payment</li>
+        </ul>
+        <div id="paypal-slot"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p><b>Photo requirements vary by country.</b> Use this tool to match a size; always check your government's current rules for background, expression and head position. We do not upload, store or see your photos — all processing happens locally in your browser.</p>
+    <p id="footNote"></p>
+  </footer>
+</div>
+
+<script>
+/* ---------- specs ---------- */
+const SPECS = [
+  {id:'us',   name:'US Passport',  w:600, h:600, mm:['2×2 in'],        note:'Head 50–69% of height'},
+  {id:'usv',  name:'US Visa',      w:600, h:600, mm:['2×2 in'],        note:'Same as passport'},
+  {id:'schen',name:'Schengen',     w:413, h:531, mm:['35×45 mm'],      note:'Head 70–80% of height'},
+  {id:'uk',   name:'UK Passport',  w:413, h:531, mm:['35×45 mm'],      note:'Plain light background'},
+  {id:'cn',   name:'China Visa',   w:390, h:567, mm:['33×48 mm'],      note:'White background'},
+  {id:'in',   name:'India Visa',   w:600, h:600, mm:['2×2 in'],        note:'White background'},
+  {id:'ca',   name:'Canada',       w:420, h:540, mm:['50×70 mm'],      note:'Head 31–36 mm'},
+  {id:'au',   name:'Australia',    w:413, h:531, mm:['35×45 mm'],      note:'Plain background'},
+];
+
+let state = {spec: SPECS[0], img:null, scale:1, ox:0, oy:0, whiteBg:false, dragging:false, lastX:0, lastY:0};
+
+const $ = s => document.querySelector(s);
+const specsEl = $('#specs'), dropEl = $('#drop'), fileEl = $('#file'),
+      stageEl = $('#stage'), cv = $('#cv'), ctx = cv.getContext('2d');
+
+/* ---------- build spec list ---------- */
+SPECS.forEach((s,i)=>{
+  const d = document.createElement('div');
+  d.className = 'spec' + (i===0?' on':'');
+  d.dataset.id = s.id;
+  d.innerHTML = `<b>${s.name}</b><span>${s.mm[0]} · ${s.w}×${s.h}px</span>`;
+  d.onclick = ()=>{
+    document.querySelectorAll('.spec').forEach(x=>x.classList.remove('on'));
+    d.classList.add('on');
+    state.spec = s;
+    if (state.img) { fitCanvas(); resetFit(); }
+    updateInfo();
+  };
+  specsEl.appendChild(d);
+});
+
+/* ---------- file input ---------- */
+dropEl.onclick = ()=> fileEl.click();
+['dragenter','dragover'].forEach(e=>dropEl.addEventListener(e, ev=>{
+  ev.preventDefault(); dropEl.classList.add('hot');
+}));
+['dragleave','drop'].forEach(e=>dropEl.addEventListener(e, ev=>{
+  ev.preventDefault(); dropEl.classList.remove('hot');
+}));
+dropEl.addEventListener('drop', ev=>{
+  const f = ev.dataTransfer.files[0]; if (f) loadFile(f);
+});
+fileEl.onchange = e=>{ const f = e.target.files[0]; if (f) loadFile(f); };
+
+function loadFile(f){
+  if (!f.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
+  const url = URL.createObjectURL(f);
+  const im = new Image();
+  im.onload = ()=>{
+    state.img = im;
+    stageEl.classList.add('on');
+    fitCanvas();
+    resetFit();
+    updateInfo();
+    stageEl.scrollIntoView({behavior:'smooth', block:'nearest'});
+  };
+  im.onerror = ()=> alert('Could not read that file. Try a JPG or PNG.');
+  im.src = url;
+}
+
+/* ---------- canvas sizing ---------- */
+function fitCanvas(){
+  const s = state.spec;
+  const maxW = $('#canvasWrap').clientWidth || 560;
+  const ratio = s.w / s.h;
+  let w = Math.min(maxW, 520);
+  let h = w / ratio;
+  if (h > 480) { h = 480; w = h * ratio; }
+  cv.width = Math.round(s.w);
+  cv.height = Math.round(s.h);
+  cv.style.width = w + 'px';
+  cv.style.height = h + 'px';
+}
+
+function resetFit(){
+  if (!state.img) return;
+  const s = state.spec, im = state.img;
+  state.scale = Math.max(s.w / im.width, s.h / im.height) * 1.0;
+  state.ox = (s.w - im.width * state.scale) / 2;
+  state.oy = (s.h - im.height * state.scale) / 2;
+  draw();
+}
+
+function draw(){
+  const s = state.spec, im = state.img;
+  if (!im) return;
+  ctx.clearRect(0,0,s.w,s.h);
+  ctx.fillStyle = state.whiteBg ? '#ffffff' : '#0a0c10';
+  ctx.fillRect(0,0,s.w,s.h);
+  ctx.drawImage(im, state.ox, state.oy, im.width*state.scale, im.height*state.scale);
+
+  // guide lines: head zone (top 12% - 80%)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(79,140,255,.85)';
+  ctx.lineWidth = Math.max(1.5, s.w/300);
+  ctx.setLineDash([10, 7]);
+  ctx.strokeRect(s.w*0.5 - 0, s.h*0.12, 0.001, s.h*0.68); // centre line
+  ctx.beginPath(); ctx.moveTo(s.w/2, 0); ctx.lineTo(s.w/2, s.h); ctx.stroke();
+  ctx.setLineDash([4, 8]);
+  ctx.strokeRect(s.w*0.15, s.h*0.12, s.w*0.7, s.h*0.68);
+  ctx.restore();
+
+  updateInfo();
+}
+
+/* ---------- pan / zoom ---------- */
+function pt(e){ return {x: e.clientX, y: e.clientY}; }
+cv.addEventListener('pointerdown', e=>{
+  if (!state.img) return;
+  state.dragging = true; state.lastX = e.clientX; state.lastY = e.clientY;
+  cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove', e=>{
+  if (!state.dragging || !state.img) return;
+  const rect = cv.getBoundingClientRect();
+  const k = state.spec.w / rect.width;
+  state.ox += (e.clientX - state.lastX) * k;
+  state.oy += (e.clientY - state.lastY) * k;
+  state.lastX = e.clientX; state.lastY = e.clientY;
+  draw();
+});
+['pointerup','pointercancel'].forEach(ev=>cv.addEventListener(ev, ()=>{ state.dragging = false; }));
+
+cv.addEventListener('wheel', e=>{
+  if (!state.img) return;
+  e.preventDefault();
+  zoomAt(e.clientX, e.clientY, e.deltaY > 0 ? 0.94 : 1.06);
+}, {passive:false});
+
+function zoomAt(cx, cy, factor){
+  const rect = cv.getBoundingClientRect();
+  const k = state.spec.w / rect.width;
+  const px = (cx - rect.left) * k, py = (cy - rect.top) * k;
+  const ns = Math.min(12, Math.max(0.2, state.scale * factor));
+  const r = ns / state.scale;
+  state.ox = px - (px - state.ox) * r;
+  state.oy = py - (py - state.oy) * r;
+  state.scale = ns;
+  draw();
+}
+
+// pinch
+let pinch = null;
+cv.addEventListener('touchmove', e=>{
+  if (e.touches.length !== 2 || !state.img) return;
+  e.preventDefault();
+  const d = Math.hypot(
+    e.touches[0].clientX - e.touches[1].clientX,
+    e.touches[0].clientY - e.touches[1].clientY);
+  if (pinch) zoomAt((e.touches[0].clientX+e.touches[1].clientX)/2,
+                    (e.touches[0].clientY+e.touches[1].clientY)/2, d / pinch);
+  pinch = d;
+}, {passive:false});
+cv.addEventListener('touchend', ()=>{ pinch = null; });
+
+/* ---------- info ---------- */
+function updateInfo(){
+  const s = state.spec;
+  $('#oSize').textContent = s.mm[0];
+  $('#oPx').textContent = `${s.w} × ${s.h}`;
+  $('#oBg').textContent = state.whiteBg ? 'White' : 'Keep original';
+  $('#footNote').textContent = `${s.name}: ${s.note}.`;
+  const w = $('#warn');
+  if (!state.img) return;
+  const im = state.img;
+  const eff = im.width * state.scale;
+  if (eff < s.w * 1.2) {
+    w.textContent = 'This photo is small — the result may look soft. A larger original is better.';
+    w.classList.add('on');
+  } else { w.classList.remove('on'); }
+}
+
+/* ---------- background swap ---------- */
+$('#bgBtn').onclick = ()=>{
+  state.whiteBg = !state.whiteBg;
+  $('#bgBtn').textContent = state.whiteBg ? 'Keep original background' : 'White background';
+  draw();
+};
+$('#resetBtn').onclick = ()=> resetFit();
+
+/* ---------- download (free preview: half resolution) ---------- */
+$('#dlBtn').onclick = ()=>{
+  if (!state.img) return;
+  const s = state.spec;
+  const out = document.createElement('canvas');
+  out.width = Math.round(s.w / 2);
+  out.height = Math.round(s.h / 2);
+  const o = out.getContext('2d');
+  o.fillStyle = state.whiteBg ? '#fff' : '#fff';
+  o.fillRect(0,0,out.width,out.height);
+  o.drawImage(cv, 0, 0, out.width, out.height);
+  // watermark on free preview
+  o.save();
+  o.fillStyle = 'rgba(0,0,0,.18)';
+  o.font = `bold ${Math.max(10, out.width/18)}px sans-serif`;
+  o.textAlign = 'center';
+  o.translate(out.width/2, out.height/2);
+  o.rotate(-Math.PI/9);
+  o.fillText('PREVIEW', 0, 0);
+  o.restore();
+  out.toBlob(b=>{
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = `${s.id}-preview.png`;
+    a.click();
+  }, 'image/png');
+};
+
+/* ---------- paypal (loads lazily) ---------- */
+(function(){
+  const PLAN = 'P-3XK29302RL755743BNLUDLCA';
+  const slot = document.getElementById('paypal-slot');
+  if (!slot) return;
+  const s = document.createElement('script');
+  s.src = 'https://www.paypal.com/sdk/js?client-id=BAAqBLdcgBGkTUdZX8yHP3sPUdc-QUcT6lHKLPa9ZSiz7IcSG3nfMDeB2JNNQkRjlv1mtnieH1lNxwLgSM&vault=true&intent=subscription';
+  s.onload = function(){
+    if (typeof paypal === 'undefined') { slot.textContent = 'Payment unavailable right now.'; return; }
+    paypal.Buttons({
+      style:{shape:'rect', color:'gold', layout:'vertical', label:'subscribe'},
+      createSubscription:(d,a)=> a.subscription.create({plan_id: PLAN}),
+      onApprove:(d)=> { alert('Subscribed. subscriptionID: ' + d.subscriptionID); }
+    }).render('#paypal-slot');
+  };
+  s.onerror = function(){ slot.textContent = 'Payment unavailable right now.'; };
+  document.head.appendChild(s);
+})();
+
+/* ---------- init ---------- */
+updateInfo();
+window.addEventListener('resize', ()=>{ if (state.img) { fitCanvas(); draw(); } });
+</script>
+</body>
+</html>
